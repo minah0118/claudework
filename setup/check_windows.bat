@@ -7,12 +7,12 @@ echo ==========================================
 echo.
 
 echo [1] Python
-where python > nul 2>&1
+python --version 2>&1 | findstr /b /c:"Python 3" > nul
 if %errorlevel%==0 (
     python --version
     echo    =^> 설치되어 있어요.
 ) else (
-    echo    =^> 설치되어 있지 않아요.
+    echo    =^> 설치되어 있지 않아요. ^(버전 숫자가 나오지 않음^)
 )
 echo.
 
