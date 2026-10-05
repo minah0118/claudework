@@ -4,8 +4,9 @@
   1. '구간.txt'에 적은 구간만 남겨요.
   2. 그 안에서 소리가 없는 부분을 자동으로 잘라내요.
   3. 구간과 구간 사이에 부드러운 전환 효과를 넣어요.
-  4. 재생 속도를 빠르게 해요.
-  5. 말한 내용을 인식해서 자막을 넣어요.
+  4. 영상의 처음은 서서히 나타나고, 끝은 서서히 사라지게 해요.
+  5. 재생 속도를 빠르게 해요.
+  6. 말한 내용을 인식해서 자막을 넣어요.
 
 사용법
   1. 같은 폴더의 '구간.txt'에 남기고 싶은 구간을 적어요.
@@ -40,11 +41,15 @@ PADDING_SEC = 0.2         # 말 앞뒤로 이만큼(초)은 남겨서 말이 뚝
 TRANSITION = True         # 구간.txt의 구간과 구간 사이에 전환 효과를 넣어요
 TRANSITION_SEC = 0.5      # 전환 효과 길이(초)
 
+# [인트로/아웃트로 페이드]
+FADE = True               # 영상 처음은 서서히 나타나고, 끝은 서서히 사라져요
+FADE_SEC = 1.0            # 페이드 길이(초)
+
 # [속도]
 SPEED = 1.2               # 1.0 = 원래 속도, 1.2 = 1.2배 빠르게, 1.5 = 1.5배 빠르게
 
 # [자막]
-SUBTITLES = True          # 자막을 자동으로 넣어요 (faster-whisper 설치 필요)
+SUBTITLES = False         # True로 바꾸면 자막을 자동으로 넣어요 (faster-whisper 설치 필요, 오래 걸려요)
 WHISPER_MODEL = "small"   # "small" = 빠름, "medium" = 더 정확하지만 느림
 SUBTITLE_SIZE = 7.0       # 자막 글자 크기
 # ────────────────────────────────────────────────────
@@ -209,6 +214,7 @@ def main() -> None:
     if whisper:
         script.add_track(cc.TrackType.text, "자막")
 
+    all_segments = []  # 모든 영상 조각 (페이드를 붙인 뒤 한꺼번에 타임라인에 넣어요)
     position = 0       # 완성 영상에서 다음 조각이 놓일 위치
     original_total = 0
     subtitle_count = 0
@@ -244,8 +250,7 @@ def main() -> None:
         # (pyCapCut은 타임라인에 넣기 전에 붙인 전환만 저장해요)
         if TRANSITION and i < len(ranges):
             segments[-1].add_transition(cc.TransitionType.叠化, duration=int(TRANSITION_SEC * SEC))
-        for segment in segments:
-            script.add_segment(segment)
+        all_segments.extend(segments)
 
         if whisper:
             print("  말을 글자로 바꾸는 중... (구간이 길면 오래 걸려요)")
@@ -266,6 +271,22 @@ def main() -> None:
                 last_end = te
                 subtitle_count += 1
             print(f"  자막 지금까지 {subtitle_count}개")
+
+    if not all_segments:
+        raise ValueError("남은 영상이 없어요. 구간이 전부 무음이었어요.")
+
+    # 처음 조각은 서서히 나타나고, 마지막 조각은 서서히 사라지게 해요
+    # (조각이 짧으면 페이드도 그 절반 길이로 줄여요)
+    if FADE:
+        first, last = all_segments[0], all_segments[-1]
+        first.add_animation(cc.IntroType.渐显,
+                            duration=min(int(FADE_SEC * SEC), first.target_timerange.duration // 2))
+        last.add_animation(cc.OutroType.渐隐,
+                           duration=min(int(FADE_SEC * SEC), last.target_timerange.duration // 2))
+
+    # pyCapCut은 타임라인에 넣기 전에 붙인 효과만 저장해요
+    for segment in all_segments:
+        script.add_segment(segment)
 
     script.save()
     print(f"\n완성! 고른 구간 {format_time(original_total)} → 완성 영상 {format_time(position)}")
